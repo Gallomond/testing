@@ -197,7 +197,7 @@ class Socket:
     def sendSynPacket(self):
         synPkt = Packet(seqNum=self.seqNum, connId=self.connId, isSyn=True)
         ### UPDATE CORRECTLY HERE
-        self.seqNum += 1
+        self.seqNum = 5000
         self._send(synPkt)
 
     def expectSynAck(self):
