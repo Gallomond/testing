@@ -100,7 +100,7 @@ class Socket:
             if pkt and pkt.isSyn:
                 hadNewConnId = True
                 ### UPDATE CORRECTLY HERE
-                clientSock = Socket(connId = self.connId, synReceived=True, sock=self.sock, inSeq=self.base, noClose=True)
+                clientSock = Socket(connId = self.connId, synReceived=True, sock=self.sock, inSeq=5000, noClose=True)
                 # at this point, syn was received, ack for syn was sent, now need to send our SYN and wait for ACK
                 clientSock._connect(self.lastFromAddr)
                 return clientSock
