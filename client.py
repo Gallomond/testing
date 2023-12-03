@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+'''#!/usr/bin/env python3
 
 import argparse
 import os
@@ -28,18 +28,6 @@ def start():
                         total_sent += sent
                         data = f.read(50000)
 
-             # Gracefully terminate the connection
-            sock.sendFinPacket()
-            sock.expectFinAck()
-
-            # Wait for incoming FIN packets
-            start_time = time.time()
-            while time.time() - start_time < 2:
-                pkt = sock._recv()
-                if pkt and pkt.isFin:
-                    # Respond to each incoming FIN with an ACK packet
-                    sock.sendAckPacket()
-
             # Close connection
             sock.close()
     except RuntimeError as e:
@@ -47,4 +35,4 @@ def start():
         sys.exit(1)
 
 if __name__ == '__main__':
-    start()
+    start()'''
