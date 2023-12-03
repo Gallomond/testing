@@ -122,7 +122,7 @@ class Socket:
         '''"Private" method to receive incoming packets'''
 
         try:
-            (inPacket, self.lastFromAddr) = self.sock.recvfrom(1024)
+            (inPacket, self.lastFromAddr) = self.sock.recvfrom(50000)
         except socket.error as e:
             return None
 
