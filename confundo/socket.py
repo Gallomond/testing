@@ -23,6 +23,7 @@ class State(Enum):
 # class TimeoutError:
 #     pass
 
+MAX_SEQ_NUM = 50000
 class Socket:
     '''Incomplete socket abstraction for Confundo protocol'''
 
@@ -32,7 +33,7 @@ class Socket:
         self.sock.settimeout(0.5)
         self.timeout = 10
 
-        self.base = 12345
+        self.base = 50000
         self.seqNum = self.base
 
         self.inSeq = inSeq
@@ -50,8 +51,8 @@ class Socket:
         self.remote = None
         self.noClose = noClose
         
-        self.cwnd = 1
-        self.ssthresh = 64
+        self.cwnd = 412
+        self.ssthresh = 12000
         self.dupAckThreshold = 3
 
     def __enter__(self):
@@ -100,7 +101,7 @@ class Socket:
             if pkt and pkt.isSyn:
                 hadNewConnId = True
                 ### UPDATE CORRECTLY HERE
-                clientSock = Socket(connId = self.connId, synReceived=True, sock=self.sock, inSeq=5000, noClose=True)
+                clientSock = Socket(connId = self.connId, synReceived=True, sock=self.sock, inSeq=0, noClose=True)
                 # at this point, syn was received, ack for syn was sent, now need to send our SYN and wait for ACK
                 clientSock._connect(self.lastFromAddr)
                 return clientSock
@@ -134,7 +135,7 @@ class Socket:
         outPkt = None
         if inPkt.isSyn:
             ### UPDATE CORRECTLY HERE
-            self.inSeq = inPkt.seqNum
+            self.inSeq = 0
             if inPkt.connId != 0:
                 self.connId = inPkt.connId
             self.synReceived = True
@@ -198,6 +199,8 @@ class Socket:
         synPkt = Packet(seqNum=self.seqNum, connId=self.connId, isSyn=True)
         ### UPDATE CORRECTLY HERE
         self.seqNum = 5000
+        if self.seqNum >= MAX_SEQ_NUM:
+            self.seqNum = 0
         self._send(synPkt)
 
     def expectSynAck(self):
@@ -208,6 +211,11 @@ class Socket:
             if pkt and pkt.isAck and pkt.ackNum == self.seqNum:
                 self.base = self.seqNum
                 self.state = State.OPEN
+                
+                # Send the final ACK packet in response to SYN-ACK
+                ack_packet = Packet(seqNum=self.seqNum, ackNum=pkt.seqNum + 1, connId=self.connId, isAck=True)
+                self._send(ack_packet)
+            
                 break
             if time.time() - startTime > GLOBAL_TIMEOUT:
                 self.state = State.ERROR
@@ -217,6 +225,8 @@ class Socket:
         synPkt = Packet(seqNum=self.seqNum, connId=self.connId, isFin=True)
         ### UPDATE CORRECTLY HERE
         self.seqNum += 1
+        if self.seqNum >= MAX_SEQ_NUM:
+            self.seqNum = 0
         self._send(synPkt)
 
     def expectFinAck(self):
@@ -257,8 +267,6 @@ class Socket:
         congestion control operations.  You would need to update things here and in `format_msg` calls
         in this file to properly print values.
         '''
-
-        print(f'SEND {pkt.seqNum} {pkt.ackNum} {pkt.connId} {self.cc.cwnd} {self.cc.ss_thresh} {"ACK" if pkt.isAck else ""} {"SYN" if pkt.isSyn else ""} {"FIN" if pkt.isFin else ""} {"DUP" if pkt.isDuplicated else ""}')
     
         if self.remote:
             self.sock.sendto(pkt.encode(), self.remote)
@@ -271,7 +279,7 @@ class Socket:
         self.outBuffer += data
 
         startTime = time.time()
-        while len(self.outBuffer) > 0:
+        while len(self.outBuffer) > 0:  #and MTU >= len(self.outBuffer):
             toSend = self.outBuffer[:MTU]
             pkt = Packet(seqNum=self.base, connId=self.connId, payload=toSend)
             ### UPDATE CORRECTLY HERE
@@ -281,17 +289,18 @@ class Socket:
             pkt = self._recv()  # if within RTO we didn't receive packets, things will be retransmitted
             if pkt and pkt.isAck:
                 ### UPDATE CORRECTLY HERE
-                advanceAmount = pkt.ackNum - self.base
+                advanceAmount = max(pkt.ackNum - self.base, 0)
                 if advanceAmount == 0:
                     self.nDupAcks += 1
                 else:
                     self.nDupAcks = 0
-
-                self.outBuffer = self.outBuffer[advanceAmount:]
+               
+                endIndex = min(len(self.outBuffer), advanceAmount)
+                self.outBuffer = self.outBuffer[endIndex:]
                 ### UPDATE CORRECTLY HERE
                 self.base = pkt.ackNum
 
-            elif pkt and pkt.isDupAck:
+            elif pkt and pkt.isDup:
                 self.nDupAcks += 1
                 if self.nDupAcks == self.dupAckThreshold:
                     # Fast retransmit
@@ -308,4 +317,5 @@ class Socket:
                 self.state = State.ERROR
                 raise RuntimeError("Timeout")
 
+        print(f'SEND {pkt.seqNum} {pkt.ackNum} {pkt.connId} {self.cc.cwnd} {self.cc.ss_thresh} {"ACK" if pkt.isAck else ""} {"SYN" if pkt.isSyn else ""} {"FIN" if pkt.isFin else ""} {"DUP" if pkt.isDup else ""}')
         return len(data)
